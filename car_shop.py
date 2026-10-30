@@ -2,19 +2,26 @@ import sqlite3
 import tkinter as tk
 
 
+class Category:
+    def __init__(self, category_id, name, description) -> None:
+        self.category_id = category_id
+        self.name = name
+        self.description = description
+
+
 class CarDetailsForm:
-    def __init__(self, root, results, add_car_callback) -> None:
+    def __init__(self, root, categories: list[Category], add_car_callback) -> None:
         self.add_car_callback = add_car_callback
         self.frame = tk.Frame(root)
-        self.results = results
+        self.categories = categories
         self.model_name_label = tk.Label(self.frame, text="Model name")
         self.model_name_box = tk.Entry(self.frame)
         self.year_label = tk.Label(self.frame, text="Year")
         self.year_box = tk.Entry(self.frame)
         self.category_label = tk.Label(self.frame, text="Category")
         self.category_list = tk.Listbox(self.frame, selectmode=tk.SINGLE, height=5)
-        for r in self.results:
-            self.category_list.insert(tk.END, f"{r[1]} ({r[2]})")
+        for r in self.categories:
+            self.category_list.insert(tk.END, f"{r.name} ({r.description})")
         self.ok_button = tk.Button(
             self.frame, text="Ok", command=self.ok_button_clicked
         )
@@ -27,12 +34,21 @@ class CarDetailsForm:
         self.category_list.pack()
         self.ok_button.pack()
 
+    def set_data(self, mn, y, c_id):
+        self.model_name_box.insert(0, mn)
+        self.year_box.insert(0, y)
+        for i, c in enumerate(self.categories):
+            if c_id == c.category_id:
+                self.category_list.select_set(i, i)
+
     def ok_button_clicked(self):
         model_name_text = self.model_name_box.get()
         year_text = self.year_box.get()
         selected = self.category_list.curselection()[0]
         self.frame.destroy()
-        self.add_car_callback(model_name_text, year_text, self.results[selected][0])
+        self.add_car_callback(
+            model_name_text, year_text, self.categories[selected].category_id
+        )
 
 
 # ok not okay
@@ -50,10 +66,11 @@ class CarsSearchForm:
     def __init__(
         self,
         root,
-        results: list[Car],
+        cars: list[Car],
         search_button_callback,
         delete_button_callback,
         add_button_callback,
+        edit_button_callback,
     ) -> None:
         self.add_button_callback = add_button_callback
         self.search_button_callback = search_button_callback
@@ -62,9 +79,12 @@ class CarsSearchForm:
         self.search_button = tk.Button(
             self.frame, text="Search", command=self.search_button_clicked
         )
+        self.edit_button_callback = edit_button_callback
         self.cars_list = tk.Listbox(self.frame, selectmode=tk.SINGLE, height=5)
-        self.show_cars(results)
-        self.edit_button = tk.Button(self.frame, text="Edit")
+        self.show_cars(cars)
+        self.edit_button = tk.Button(
+            self.frame, text="Edit", command=self.edit_button_clicked
+        )
         self.add_button = tk.Button(
             self.frame, text="Add", command=self.add_button_clicked
         )
@@ -85,20 +105,26 @@ class CarsSearchForm:
         selected = self.cars_list.curselection()
         if selected:
             self.cars_list.delete(selected[0])
-            c = self.results[selected[0]]
-            self.results.remove(c)
+            c = self.cars[selected[0]]
+            self.cars.remove(c)
             self.delete_button_callback(c.car_id)
 
     def search_button_clicked(self):
         self.search_button_callback(self.search_box.get())
 
-    def show_cars(self, results: list[Car]):
-        self.results = results
+    def show_cars(self, cars: list[Car]):
+        self.cars = cars
         self.cars_list.delete(0, self.cars_list.size())
-        for r in results:
+        for r in cars:
             self.cars_list.insert(
                 tk.END, f"{r.model_name} ({r.year}, {r.category_name})"
             )
+
+    def edit_button_clicked(self):
+        selected = self.cars_list.curselection()
+        if selected:
+            self.frame.destroy()
+            self.edit_button_callback(self.cars[selected[0]].car_id)
 
     def add_button_clicked(self):
         self.frame.destroy()
@@ -106,7 +132,6 @@ class CarsSearchForm:
 
 
 root = tk.Tk()
-# modelname (year, category_name)
 conn = sqlite3.connect("cars.db")
 
 
@@ -123,9 +148,24 @@ def execute_add():
     results = conn.execute(
         "SELECT category_id ,category_name, description FROM car_categories"
     ).fetchall()
-    print(results)
 
-    cardetailsform = CarDetailsForm(root, results, execute_add_car)
+    cardetailsform = CarDetailsForm(
+        root, list(Category(r[0], r[1], r[2]) for r in results), execute_add_car
+    )
+
+
+def execute_edit_car(car_id):
+
+    result = conn.execute(
+        f"SELECT model_name, year, category_id FROM cars WHERE car_id= {car_id}"
+    ).fetchone()
+    categories = conn.execute(
+        "SELECT category_id ,category_name, description FROM car_categories"
+    ).fetchall()
+    car_details_form = CarDetailsForm(
+        root, list(Category(r[0], r[1], r[2]) for r in categories), execute_add_car
+    )
+    car_details_form.set_data(result[0], result[1], result[2])
 
 
 def execute_delete(car_id):
@@ -151,6 +191,7 @@ def create_car_search_form():
         execute_search,
         execute_delete,
         execute_add,
+        execute_edit_car,
     )
     return car_search_form
 
