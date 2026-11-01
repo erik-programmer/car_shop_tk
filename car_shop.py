@@ -10,10 +10,13 @@ class Category:
 
 
 class CarDetailsForm:
-    def __init__(self, root, categories: list[Category], add_car_callback) -> None:
-        self.add_car_callback = add_car_callback
+    def __init__(
+        self, root, categories: list[Category], save_car_callback, is_car_update
+    ) -> None:
+        self.save_car_callback = save_car_callback
         self.frame = tk.Frame(root)
         self.categories = categories
+        self.is_car_update = is_car_update
         self.model_name_label = tk.Label(self.frame, text="Model name")
         self.model_name_box = tk.Entry(self.frame)
         self.year_label = tk.Label(self.frame, text="Year")
@@ -34,7 +37,8 @@ class CarDetailsForm:
         self.category_list.pack()
         self.ok_button.pack()
 
-    def set_data(self, mn, y, c_id):
+    def set_data(self, car_id, mn, y, c_id):
+        self.car_id = car_id
         self.model_name_box.insert(0, mn)
         self.year_box.insert(0, y)
         for i, c in enumerate(self.categories):
@@ -46,9 +50,17 @@ class CarDetailsForm:
         year_text = self.year_box.get()
         selected = self.category_list.curselection()[0]
         self.frame.destroy()
-        self.add_car_callback(
-            model_name_text, year_text, self.categories[selected].category_id
-        )
+        if self.is_car_update:
+            self.save_car_callback(
+                self.car_id,
+                model_name_text,
+                year_text,
+                self.categories[selected].category_id,
+            )
+        else:
+            self.save_car_callback(
+                model_name_text, year_text, self.categories[selected].category_id
+            )
 
 
 # ok not okay
@@ -144,13 +156,22 @@ def execute_add_car(mn, y, c_id):
     car_search_form = create_car_search_form()
 
 
+def execute_update_car(car_id, mn, y, c_id):
+    global car_search_form
+    conn.execute(
+        f"UPDATE cars SET model_name = '{mn}', year = {y}, category_id = {c_id} WHERE car_id = {car_id}"
+    )
+    conn.commit()
+    car_search_form = create_car_search_form()
+
+
 def execute_add():
     results = conn.execute(
         "SELECT category_id ,category_name, description FROM car_categories"
     ).fetchall()
 
     cardetailsform = CarDetailsForm(
-        root, list(Category(r[0], r[1], r[2]) for r in results), execute_add_car
+        root, list(Category(r[0], r[1], r[2]) for r in results), execute_add_car, False
     )
 
 
@@ -163,9 +184,12 @@ def execute_edit_car(car_id):
         "SELECT category_id ,category_name, description FROM car_categories"
     ).fetchall()
     car_details_form = CarDetailsForm(
-        root, list(Category(r[0], r[1], r[2]) for r in categories), execute_add_car
+        root,
+        list(Category(r[0], r[1], r[2]) for r in categories),
+        execute_update_car,
+        True,
     )
-    car_details_form.set_data(result[0], result[1], result[2])
+    car_details_form.set_data(car_id, result[0], result[1], result[2])
 
 
 def execute_delete(car_id):
