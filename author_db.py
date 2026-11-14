@@ -2,6 +2,8 @@ import tkinter as tk
 import sqlite3
 from typing import List
 
+# Plan
+
 
 class Author:
     def __init__(self, result) -> None:
@@ -77,37 +79,43 @@ class AuthorListForm:
         selected = self.author_list_box.curselection()
         if selected:
             a = self.authors[selected[0]]
-            self.authors.remove(a)
-            self.author_list_box.delete(selected[0], selected[0])
+            self.frame.destroy()
             self.delete_author_callback(a)
 
 
-root = tk.Tk()
-root.geometry("500x500")
-conn = sqlite3.connect("authors.db")
+class Main:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.geometry("500x500")
+        self.conn = sqlite3.connect("authors.db")
+
+    def create_author_list_form(self):
+        results = self.conn.execute("SELECT * FROM authors ORDER BY name").fetchall()
+        authors: List[Author] = list(Author(result) for result in results)
+        AuthorListForm(
+            self.root, authors, self.delete_author_from_db, self.create_add_author_form
+        )
+
+    def delete_author_from_db(self, author: Author):
+        self.conn.execute(f"delete from authors where author_id = {author.id}")
+        self.conn.commit()
+        self.create_author_list_form()
+
+    def insert_author_to_db(self, name, country, birth_year):
+        self.conn.execute(
+            f"INSERT INTO authors (name,country,birth_year) Values ('{name}','{country}',{birth_year})"
+        )
+        self.conn.commit()
+        self.create_author_list_form()
+
+    def create_add_author_form(self):
+        authoraddform = AuthorAddForm(self.root, self.insert_author_to_db)
+
+    def run(self):
+        self.root.mainloop()
+        self.conn.close()
 
 
-def delete_author_from_db(author: Author):
-    conn.execute(f"delete from authors where author_id = {author.id}")
-    conn.commit()
-
-
-def insert_author_to_db(name, country, birth_year):
-    conn.execute(
-        f"INSERT INTO authors (name,country,birth_year) Values ('{name}','{country}',{birth_year})"
-    )
-    conn.commit()
-
-
-def create_add_author_form():
-    authoraddform = AuthorAddForm(root, insert_author_to_db)
-
-
-results = conn.execute("SELECT * FROM authors ORDER BY name").fetchall()
-authors: List[Author] = list(Author(result) for result in results)
-authorlistform = AuthorListForm(
-    root, authors, delete_author_from_db, create_add_author_form
-)
-root.mainloop()
-
-conn.close()
+main = Main()
+main.create_author_list_form()
+main.run()
